@@ -1,4 +1,3 @@
-# File: `src/python/calc_overnight_stats.py`
 import sys
 import sqlite3
 import argparse
@@ -30,10 +29,11 @@ def compute_reference_stats(db_path: str, symbol: str, start_date: str, end_date
     pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Returns:
-      - display_df: pretty DataFrame (strings) with top-level header "<symbol> stats" and values formatted to 3 decimals
+      - display_df: pretty DataFrame (strings) with top-level header "<description> (<symbol>) stats"
       - numeric_df: numeric DataFrame (float) with identical layout for downstream use
       - returns_df: log-return series indexed by trade_date (columns: full_log, intraday_log, overnight_log)
       - cum_df: cumulative $1 series for plotting (columns: Full, Intraday, Overnight), indexed by trade_date
+    Description is taken from `rollover_rules.description` (falls back to `symbol`).
     """
     conn = sqlite3.connect(db_path)
     sql = """
@@ -44,6 +44,16 @@ def compute_reference_stats(db_path: str, symbol: str, start_date: str, end_date
         ORDER BY trade_date
     """
     df = pd.read_sql_query(sql, conn, params=(symbol, start_date, end_date))
+
+    # Fetch description from rollover_rules (fallback to symbol if missing)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT description FROM rollover_rules WHERE symbol_code = ?", (symbol,))
+        row = cur.fetchone()
+        description = row[0] if row and row[0] else symbol
+    except Exception:
+        description = symbol
+
     conn.close()
 
     # intraday: ln(close / open) only when prev_close exists (per requirement)
@@ -128,8 +138,8 @@ def compute_reference_stats(db_path: str, symbol: str, start_date: str, end_date
     display_df = numeric_df.copy()
     display_df = display_df.stack().map(fmt_cell).unstack()
 
-    # Put top-level label "<symbol> stats" above the three columns (MultiIndex)
-    top_label = f"{symbol} stats"
+    # Put top-level label "<description> (<symbol>) stats" above the three columns (MultiIndex)
+    top_label = f"{description} ({symbol}) stats"
     display_df.columns = pd.MultiIndex.from_product([[top_label], display_df.columns])
     numeric_df.columns = pd.MultiIndex.from_product([[top_label], numeric_df.columns])
 
@@ -164,12 +174,24 @@ def plot_cumulative(cum_df: pd.DataFrame, symbol: str, show_diff: bool = True):
     """Plot cumulative $1 growth for Full, Intraday, Overnight.
     If show_diff is True, add a second (stacked) chart sharing the x-axis that shows
     the ratio Overnight / Intraday.
+    The chart title includes the description from `rollover_rules` when available.
     """
     try:
         sns.set_theme(style="darkgrid")
         logging.debug("Using seaborn theme 'darkgrid' for plotting.")
     except Exception:
         logging.debug("seaborn theme failed; using matplotlib defaults.")
+
+    # Try to fetch description from DB (fallback to symbol)
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute("SELECT description FROM rollover_rules WHERE symbol_code = ?", (symbol,))
+        row = cur.fetchone()
+        description = row[0] if row and row[0] else symbol
+        conn.close()
+    except Exception:
+        description = symbol
 
     # Determine which series to plot
     plotted = []
@@ -209,7 +231,7 @@ def plot_cumulative(cum_df: pd.DataFrame, symbol: str, show_diff: bool = True):
         else:
             new_labels.append(lab)
     ax.legend(handles, new_labels, loc='best')
-    ax.set_title(f"Cumulative $1 returns — {symbol}")
+    ax.set_title(f"Cumulative $1 returns - {description} ({symbol})")
     ax.set_ylabel("Value of $1")
 
     # Bottom: ratio Overnight / Intraday
@@ -248,7 +270,6 @@ def plot_cumulative(cum_df: pd.DataFrame, symbol: str, show_diff: bool = True):
     plt.show()
 
 
-# python
 def main(argv=None, start_date: str = None, end_date: str = None, show_diff: bool = True) -> int:
     parser = argparse.ArgumentParser(
         description="Compute overnight/intraday/full return stats from daily_reference_prices"
@@ -306,7 +327,7 @@ def main(argv=None, start_date: str = None, end_date: str = None, show_diff: boo
         logging.exception("Failed to compute stats")
         return 2
 
-    # Print the pretty display DataFrame (top-left header is "<symbol> stats")
+    # Print the pretty display DataFrame (top-left header includes description now)
     print(display_df.to_string())
 
     # Plot cumulative returns, passing effective_show_diff
