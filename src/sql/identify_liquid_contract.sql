@@ -51,3 +51,7 @@ LEFT JOIN contracts AS c
     ON l.contract_id = c.contract_id
 WHERE l.symbol_code = 'FV'
 ORDER BY l.trade_date;
+
+/* Count contracts in the database */
+SELECT count(distinct(symbol_code))
+from liquid_contract_daily;
