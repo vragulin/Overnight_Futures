@@ -1,8 +1,6 @@
 # Scripts to analyze intraday and overnight futures returns
 
 ## Main script
-
-"""
 calc_overnight_stats.py
 
 Purpose
