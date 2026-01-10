@@ -31,8 +31,19 @@ LEFT JOIN symbols   s ON c.symbol_code = s.symbol_code
 WHERE COALESCE(c.symbol_code, s.symbol_code) LIKE 'ES%'
 ORDER BY full_symbol;
 
+/* Show bitcoin futures contracts */
+SELECT DISTINCT b.contract_id,
+       COALESCE(c.symbol_code, s.symbol_code) || c.month_code || printf('%02d', c.year % 100) AS full_symbol,
+       c.first_trade_date,
+       c.last_trade_date
+FROM bars_5min b
+LEFT JOIN contracts c ON b.contract_id = c.contract_id
+LEFT JOIN symbols   s ON c.symbol_code = s.symbol_code
+WHERE COALESCE(c.symbol_code, s.symbol_code) LIKE 'BTC%'
+ORDER BY full_symbol;
+
 /* Show symbols table */
-select * from symbols limit 10;
+select * from symbols limit 100;
 
 /* Update contracts table with first and last trade dates from bars_5min */
 
@@ -44,6 +55,7 @@ SELECT contracts.contract_id,
        (SELECT MIN(date("timestamp")) FROM bars_5min WHERE bars_5min.contract_id = contracts.contract_id) AS first_trade_date,
        (SELECT MAX(date("timestamp")) FROM bars_5min WHERE bars_5min.contract_id = contracts.contract_id) AS last_trade_date
 FROM contracts
+WHERE symbol_code like 'BTC%'
 ORDER BY contracts.contract_id
 LIMIT 100;
 
@@ -56,3 +68,13 @@ SET first_trade_date = (
 last_trade_date = (
     SELECT MAX(date("timestamp")) FROM bars_5min WHERE bars_5min.contract_id = contracts.contract_id
 );
+/* Show bitcoin futures contracts with volume over 2500 */
+SELECT DISTINCT b.contract_id,
+       COALESCE(c.symbol_code, s.symbol_code) || c.month_code || printf('%02d', c.year % 100) AS contract_symbol,
+       b.volume
+FROM bars_5min b
+LEFT JOIN contracts c ON b.contract_id = c.contract_id
+LEFT JOIN symbols   s ON c.symbol_code = s.symbol_code
+WHERE COALESCE(c.symbol_code, s.symbol_code) LIKE 'ES%'
+  AND b.volume > 2500
+ORDER BY contract_symbol;

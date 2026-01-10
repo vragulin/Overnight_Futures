@@ -74,6 +74,7 @@ def load_all(root_dir, db_path):
         ensure_symbol(conn, symbol_code)
         contract_id = ensure_contract(conn, symbol_code, month_code, year, path.name)
         load_bars_for_file(conn, path, contract_id)
+        logging.info("Successfully uploaded file: %s", path.name)  # Log progress
     conn.close()
 
 
